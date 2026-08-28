@@ -9,6 +9,11 @@ const jobsRouter = require('./routes/jobs');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const HOST = process.env.HOST || '0.0.0.0';
+
+// Behind a reverse proxy (nginx): trust X-Forwarded-* so req.ip is the real
+// client and the rate limiter keys per visitor, not per proxy.
+app.set('trust proxy', 1);
 
 // In-memory job store (swap for Redis/DB in production)
 global.scanJobs = new Map();
@@ -22,7 +27,12 @@ const BYPASS_TOKEN = process.env.SCAN_BYPASS_TOKEN || '';
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: Number(process.env.RATE_LIMIT_MAX) || 50,
-  skip: (req) => BYPASS_TOKEN && req.get('X-Scan-Token') === BYPASS_TOKEN,
+  skip: (req) => {
+    if (BYPASS_TOKEN && req.get('X-Scan-Token') === BYPASS_TOKEN) return true;
+    // Read-only status polling is frequent (UI polls every 2s) — don't count it.
+    if (req.method === 'GET' && /^\/api\/(jobs\/|health)/.test(req.originalUrl)) return true;
+    return false;
+  },
   message: { error: 'Забагато запитів, спробуйте пізніше.' }
 });
 app.use('/api/', limiter);
@@ -34,6 +44,6 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.listen(PORT, () => {
-  console.log(`WP Scanner backend running on port ${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`WP Scanner backend running on ${HOST}:${PORT}`);
 });
