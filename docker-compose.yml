@@ -1,0 +1,22 @@
+services:
+  backend:
+    build: ./backend
+    container_name: wpguard-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      - PORT=3001
+    ports:
+      - "3001:3001"
+
+  frontend:
+    build: ./frontend
+    container_name: wpguard-frontend
+    restart: unless-stopped
+    environment:
+      - REACT_APP_API_URL=http://backend:3001
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
